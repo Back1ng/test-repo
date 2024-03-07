@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace src\Decorator;
 
 use DateTime;
@@ -8,32 +10,32 @@ use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
 use src\Integration\DataProvider;
 
-class DecoratorManager extends DataProvider
+final class DecoratorManager
 {
-    public $cache;
-    public $logger;
+    private LoggerInterface $logger;
 
     /**
-     * @param string $host
-     * @param string $user
-     * @param string $password
+     * @param DataProvider $dataProvider
+     * @param ClientInterface $client
      * @param CacheItemPoolInterface $cache
      */
-    public function __construct($host, $user, $password, CacheItemPoolInterface $cache)
-    {
-        parent::__construct($host, $user, $password);
-        $this->cache = $cache;
-    }
+    public function __construct(
+        public readonly DataProvider $dataProvider,
+        public readonly ClientInterface $client,
+        public readonly CacheItemPoolInterface $cache,
+    ) {}
 
-    public function setLogger(LoggerInterface $logger)
+    public function setLogger(LoggerInterface $logger): self
     {
         $this->logger = $logger;
+
+        return $this;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getResponse(array $input)
+    public function getResponse(array $input): array
     {
         try {
             $cacheKey = $this->getCacheKey($input);
@@ -41,8 +43,8 @@ class DecoratorManager extends DataProvider
             if ($cacheItem->isHit()) {
                 return $cacheItem->get();
             }
-
-            $result = parent::get($input);
+            
+            $result = $this->client->get($input);
 
             $cacheItem
                 ->set($result)
@@ -53,12 +55,14 @@ class DecoratorManager extends DataProvider
             return $result;
         } catch (Exception $e) {
             $this->logger->critical('Error');
+
+            throw $e;
         }
 
         return [];
     }
 
-    public function getCacheKey(array $input)
+    private function getCacheKey(array $input): string
     {
         return json_encode($input);
     }
